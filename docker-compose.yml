@@ -1,0 +1,44 @@
+services:
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: matchconsult_qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"   # Dashboard : http://IP_SERVEUR:6333/dashboard
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: matchconsult_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - QDRANT_URL=http://qdrant:6333
+      - CV_DIRECTORY=./data/cvs
+      - DEMO_MODE=false
+      - GROQ_MODEL=llama-3.1-8b-instant
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173}
+    volumes:
+      - ./backend/data:/app/data   # CVs persistants entre redémarrages
+    depends_on:
+      - qdrant
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: matchconsult_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"   # Interface web : http://IP_SERVEUR
+    depends_on:
+      - backend
+
+volumes:
+  qdrant_data:

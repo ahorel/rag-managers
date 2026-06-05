@@ -33,3 +33,6 @@ sentence_transformers_models/
 # OS
 .DS_Store
 Thumbs.db
+
+# Accès serveur — ne jamais commiter
+SERVEUR_ACCES.txt

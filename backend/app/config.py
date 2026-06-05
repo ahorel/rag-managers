@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     haiku_model: str = "claude-haiku-4-5-20251001"
     groq_model: str = "llama-3.1-8b-instant"
     cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    qdrant_url: str = "http://localhost:6333"
 
     model_config = {"env_file": ".env"}
 
