@@ -11,9 +11,9 @@ from app.services.cv_parser import SUPPORTED_EXTENSIONS, extract_text, name_from
 
 logger = logging.getLogger(__name__)
 
-_META_FILE  = Path(settings.cv_directory).parent / "consultants_meta.json"
-_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
-_MAX_CHARS  = 6000
+_META_FILE   = Path(settings.cv_directory).parent / "consultants_meta.json"
+_MODEL_NAME  = "paraphrase-multilingual-MiniLM-L12-v2"
+_MAX_CHARS   = 6000
 _VECTOR_SIZE = 384
 _COLLECTION  = "matchconsult_cvs"
 
@@ -54,7 +54,6 @@ class EmbeddingService:
         self._ensure_model()
         self._ensure_qdrant()
 
-        # Réindexation propre à chaque démarrage
         if self.qdrant.collection_exists(_COLLECTION):
             self.qdrant.delete_collection(_COLLECTION)
         self.qdrant.create_collection(
@@ -76,16 +75,25 @@ class EmbeddingService:
                     continue
                 embedding = self.model.encode(text[:_MAX_CHARS])
                 cv_meta   = meta.get(cv_id, {})
+                available = cv_meta.get("available", True)
+                status    = cv_meta.get("status", "intercontrat" if available else "en_mission")
                 points.append(PointStruct(
                     id=idx,
                     vector=embedding.tolist(),
                     payload={
-                        "cv_id":     cv_id,
-                        "name":      cv_meta.get("name", name_from_filename(cv_path.name)),
-                        "title":     cv_meta.get("title", ""),
-                        "available": cv_meta.get("available", True),
-                        "text":      text,
-                        "filename":  cv_path.name,
+                        "cv_id":            cv_id,
+                        "name":             cv_meta.get("name", name_from_filename(cv_path.name)),
+                        "title":            cv_meta.get("title", ""),
+                        "available":        available,
+                        "status":           status,
+                        "availability_date": cv_meta.get("availability_date"),
+                        "location":         cv_meta.get("location"),
+                        "remote":           cv_meta.get("remote", "partial"),
+                        "languages":        cv_meta.get("languages", ["fr"]),
+                        "domains":          cv_meta.get("domains", []),
+                        "email":            cv_meta.get("email"),
+                        "text":             text,
+                        "filename":         cv_path.name,
                     },
                 ))
                 idx += 1

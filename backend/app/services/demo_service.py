@@ -8,7 +8,6 @@ from app.models import RewrittenOffer
 
 
 def _extract_keywords(text: str) -> list[str]:
-    """Extrait grossièrement des mots-clés techniques du texte libre."""
     patterns = [
         r"\bJava\b", r"\bPython\b", r"\bSpring\b", r"\bDjango\b", r"\bFastAPI\b",
         r"\bReact\b", r"\bVue\b", r"\bAngular\b", r"\bTypeScript\b", r"\bJavaScript\b",
@@ -19,46 +18,53 @@ def _extract_keywords(text: str) -> list[str]:
     ]
     found = []
     for p in patterns:
-        if re.search(p, text, re.IGNORECASE):
-            found.append(re.search(p, text, re.IGNORECASE).group(0))
+        m = re.search(p, text, re.IGNORECASE)
+        if m:
+            found.append(m.group(0))
     return found[:6] if found else ["Développement logiciel", "Architecture", "API"]
 
 
 def _guess_title(text: str) -> str:
-    text_lower = text.lower()
-    if "architecte" in text_lower:
-        return "Architecte Logiciel / Cloud"
-    if "chef de projet" in text_lower or "moa" in text_lower:
-        return "Chef de Projet MOA"
-    if "devops" in text_lower:
-        return "Ingénieur DevOps"
-    if "data" in text_lower and "scientist" in text_lower:
-        return "Data Scientist"
-    if "java" in text_lower or "spring" in text_lower:
-        return "Lead Developer Java / Spring"
-    if "python" in text_lower:
-        return "Développeur Python Senior"
-    if "react" in text_lower or "frontend" in text_lower:
-        return "Développeur Frontend React"
+    t = text.lower()
+    if "architecte" in t:           return "Architecte Logiciel / Cloud"
+    if "chef de projet" in t or "moa" in t: return "Chef de Projet MOA"
+    if "devops" in t:               return "Ingénieur DevOps"
+    if "data" in t and "scientist" in t: return "Data Scientist"
+    if "java" in t or "spring" in t: return "Lead Developer Java / Spring"
+    if "python" in t:               return "Développeur Python Senior"
+    if "react" in t or "frontend" in t: return "Développeur Frontend React"
     return "Consultant Technique Senior"
 
 
 def _guess_type(text: str) -> str:
-    text_lower = text.lower()
-    if "forfait" in text_lower:
-        return "Forfait"
-    if "cdi" in text_lower:
-        return "CDI"
+    t = text.lower()
+    if "forfait" in t: return "Forfait"
+    if "cdi" in t:     return "CDI"
     return "Régie — temps plein"
+
+
+def _guess_domain(text: str) -> str:
+    t = text.lower()
+    if any(w in t for w in ["banque", "bancaire", "finance", "financ"]):
+        return "finance"
+    if any(w in t for w in ["assurance", "mutuelle"]):
+        return "assurance"
+    if any(w in t for w in ["telecom", "télécoms", "orange", "sfr"]):
+        return "telecom"
+    if any(w in t for w in ["innovation", "startup", "digital"]):
+        return "innovation"
+    if any(w in t for w in ["industrie", "industriel", "manufacturing"]):
+        return "industrie"
+    if any(w in t for w in ["mobilité", "mobilite", "transport", "automobile"]):
+        return "mobilite"
+    return "telecom"
 
 
 async def demo_rewrite_offer(mission_text: str) -> RewrittenOffer:
     keywords = _extract_keywords(mission_text)
-    title = _guess_title(mission_text)
-    mission_type = _guess_type(mission_text)
     return RewrittenOffer(
-        title=title,
-        mission_type=mission_type,
+        title=_guess_title(mission_text),
+        mission_type=_guess_type(mission_text),
         duration="6 mois (renouvelable)",
         technical_skills=keywords,
         soft_skills=["Autonomie", "Communication", "Esprit d'équipe"],
@@ -66,6 +72,11 @@ async def demo_rewrite_offer(mission_text: str) -> RewrittenOffer:
             "Mission dans un contexte client grand compte — environnement agile, "
             "équipe pluridisciplinaire, démarrage rapide souhaité."
         ),
+        start_date="dès que possible",
+        location="Paris",
+        remote="partial",
+        languages=["fr"],
+        domain=_guess_domain(mission_text),
     )
 
 

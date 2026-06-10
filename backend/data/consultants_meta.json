@@ -1,13 +1,27 @@
 {
-  "_comment": "Clé = nom du fichier CV sans extension. Toutes les clés sont optionnelles.",
+  "_comment": "Clé = nom du fichier CV sans extension. Tous les champs sont optionnels.",
   "jean_dupont": {
     "name": "Jean Dupont",
     "title": "Architecte Cloud Senior",
-    "available": true
+    "email": "jean.dupont@orange.com",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr", "en"],
+    "domains": ["telecom", "finance"]
   },
   "marie_martin": {
     "name": "Marie Martin",
     "title": "Chef de Projet MOA",
-    "available": false
+    "email": "marie.martin@orange.com",
+    "status": "en_mission",
+    "available": false,
+    "availability_date": "2026-08-01",
+    "location": "Lyon",
+    "remote": "full",
+    "languages": ["fr"],
+    "domains": ["assurance", "finance"]
   }
 }

@@ -36,3 +36,7 @@ Thumbs.db
 
 # Accès serveur — ne jamais commiter
 SERVEUR_ACCES.txt
+
+# Config runtime — contient des clés API
+backend/data/app_config.json
+backend/data/email_config.json

@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class AnalyzeRequest(BaseModel):
@@ -7,15 +7,34 @@ class AnalyzeRequest(BaseModel):
     required_availability: Optional[str] = None
     priority_skills: list[str] = []
     max_results: int = Field(default=10, ge=3, le=20)
+    filter_domain: Optional[str] = None
+    filter_location: Optional[str] = None
+    filter_remote: Optional[str] = None
+    filter_languages: list[str] = []
+    filter_intercontrat_only: bool = False
 
 
 class RewrittenOffer(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     title: str
     mission_type: str
     duration: str
     technical_skills: list[str]
     soft_skills: list[str]
     client_context: str
+    start_date: Optional[str] = None
+    location: Optional[str] = None
+    remote: Optional[str] = None
+    languages: list[str] = []
+    domain: Optional[str] = None
+
+
+class ScoreDetail(BaseModel):
+    skills: int
+    domain: int
+    availability: int
+    location: int
 
 
 class ConsultantMatch(BaseModel):
@@ -28,6 +47,14 @@ class ConsultantMatch(BaseModel):
     explanation: str
     available: bool
     cv_filename: str
+    availability_date: Optional[str] = None
+    location: Optional[str] = None
+    remote: Optional[str] = None
+    languages: list[str] = []
+    domains: list[str] = []
+    status: Optional[str] = None
+    email: Optional[str] = None
+    score_detail: Optional[ScoreDetail] = None
 
 
 class AnalyzeResponse(BaseModel):
@@ -40,3 +67,47 @@ class HealthResponse(BaseModel):
     status: str
     cvs_loaded: int
     model_ready: bool
+
+
+class SendResultsRequest(BaseModel):
+    offer: RewrittenOffer
+    consultants: list[ConsultantMatch]
+    extra_recipients: list[str] = []
+
+
+class SendResultsResponse(BaseModel):
+    success: bool
+    message: str
+    recipients: list[str]
+
+
+class EmailConfig(BaseModel):
+    recipients: list[str] = []
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    sender_email: str = "matchconsult@orange.com"
+    sender_name: str = "MatchConsult"
+
+
+class AppConfig(BaseModel):
+    groq_api_key: str = ""
+    groq_model: str = "llama-3.1-8b-instant"
+    anthropic_api_key: str = ""
+    domain_list: list[str] = [
+        "industrie", "telecom", "innovation", "mobilite", "finance", "assurance"
+    ]
+    domain_similar: dict[str, list[str]] = {
+        "finance":    ["assurance"],
+        "assurance":  ["finance"],
+        "telecom":    ["innovation"],
+        "innovation": ["telecom"],
+        "industrie":  ["mobilite"],
+        "mobilite":   ["industrie"],
+    }
+
+
+class AdminConfig(BaseModel):
+    app: AppConfig
+    email: EmailConfig

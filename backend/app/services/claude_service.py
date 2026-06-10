@@ -8,18 +8,16 @@ from app.services.demo_service import demo_explanations, demo_rewrite_offer
 
 logger = logging.getLogger(__name__)
 
-# ── Prompts (partagés par tous les backends LLM) ──────────────────────────────
-
 _REWRITE_SYSTEM = (
     "Tu es un expert en recrutement dans une ESN française. "
-    "Tu analyses des fiches de poste et les reformates de manière claire et structurée. "
+    "Tu analyses des expressions de besoin client ou des fiches de poste et les structures. "
     "Tu réponds UNIQUEMENT en JSON valide, sans markdown ni texte supplémentaire."
 )
 
 _REWRITE_TEMPLATE = """\
-Analyse cette fiche de poste et reformate-la en JSON structuré.
+Analyse ce texte (email client, expression de besoin ou fiche de poste) et structure-le en JSON.
 
-Fiche de poste :
+Texte :
 {mission_text}
 
 Retourne UNIQUEMENT ce JSON (aucun autre texte) :
@@ -27,6 +25,11 @@ Retourne UNIQUEMENT ce JSON (aucun autre texte) :
   "title": "intitulé exact du poste",
   "mission_type": "Régie | Forfait | CDI | CDD",
   "duration": "ex: 6 mois, 12 mois, CDI",
+  "start_date": "JJ/MM/AAAA ou 'dès que possible' ou null",
+  "location": "ville ou 'Remote' ou null",
+  "remote": "full | partial | none | null",
+  "languages": ["fr"],
+  "domain": "industrie | telecom | innovation | mobilite | finance | assurance | null",
   "technical_skills": ["compétence1", "compétence2"],
   "soft_skills": ["softskill1", "softskill2"],
   "client_context": "contexte client en 1-2 phrases"
@@ -50,11 +53,37 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
-# ── Anthropic backend ─────────────────────────────────────────────────────────
+def _effective_groq_key() -> str:
+    from app.services.config_service import get_app_config
+    return get_app_config().groq_api_key or settings.groq_api_key
+
+
+def _effective_anthropic_key() -> str:
+    from app.services.config_service import get_app_config
+    return get_app_config().anthropic_api_key or settings.anthropic_api_key
+
+
+def _effective_groq_model() -> str:
+    from app.services.config_service import get_app_config
+    cfg = get_app_config()
+    return cfg.groq_model or settings.groq_model
+
+
+def _effective_backend() -> str:
+    if settings.demo_mode:
+        return "demo"
+    if _effective_groq_key():
+        return "groq"
+    if _effective_anthropic_key():
+        return "anthropic"
+    return "demo"
+
+
+# ── Anthropic ─────────────────────────────────────────────────────────────────
 
 def _anthropic_client():
     import anthropic
-    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return anthropic.AsyncAnthropic(api_key=_effective_anthropic_key())
 
 
 async def _anthropic_rewrite(mission_text: str) -> RewrittenOffer:
@@ -85,17 +114,17 @@ async def _anthropic_explain_one(offer_summary: str, cv_text: str) -> str:
         return "Profil correspondant aux exigences de la mission."
 
 
-# ── Groq backend ──────────────────────────────────────────────────────────────
+# ── Groq ──────────────────────────────────────────────────────────────────────
 
 def _groq_client():
     from groq import AsyncGroq
-    return AsyncGroq(api_key=settings.groq_api_key)
+    return AsyncGroq(api_key=_effective_groq_key())
 
 
 async def _groq_rewrite(mission_text: str) -> RewrittenOffer:
     client = _groq_client()
     resp = await client.chat.completions.create(
-        model=settings.groq_model,
+        model=_effective_groq_model(),
         max_tokens=1024,
         messages=[
             {"role": "system", "content": _REWRITE_SYSTEM},
@@ -110,7 +139,7 @@ async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
     try:
         client = _groq_client()
         resp = await client.chat.completions.create(
-            model=settings.groq_model,
+            model=_effective_groq_model(),
             max_tokens=80,
             messages=[{"role": "user", "content": _EXPLAIN_TEMPLATE.format(
                 offer_summary=offer_summary, cv_excerpt=cv_text[:2000]
@@ -125,7 +154,7 @@ async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def rewrite_offer(mission_text: str) -> RewrittenOffer:
-    backend = settings.llm_backend
+    backend = _effective_backend()
     logger.info("LLM backend: %s", backend)
     if backend == "groq":
         return await _groq_rewrite(mission_text)
@@ -135,11 +164,9 @@ async def rewrite_offer(mission_text: str) -> RewrittenOffer:
 
 
 async def generate_explanations(offer_summary: str, cv_texts: list[str]) -> list[str]:
-    backend = settings.llm_backend
+    backend = _effective_backend()
     if backend == "groq":
-        tasks = [_groq_explain_one(offer_summary, t) for t in cv_texts]
-        return await asyncio.gather(*tasks)
+        return await asyncio.gather(*[_groq_explain_one(offer_summary, t) for t in cv_texts])
     if backend == "anthropic":
-        tasks = [_anthropic_explain_one(offer_summary, t) for t in cv_texts]
-        return await asyncio.gather(*tasks)
+        return await asyncio.gather(*[_anthropic_explain_one(offer_summary, t) for t in cv_texts])
     return await demo_explanations(offer_summary, cv_texts)
