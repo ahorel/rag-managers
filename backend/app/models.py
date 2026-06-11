@@ -17,12 +17,12 @@ class AnalyzeRequest(BaseModel):
 class RewrittenOffer(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    title: str
-    mission_type: str
-    duration: str
-    technical_skills: list[str]
-    soft_skills: list[str]
-    client_context: str
+    title: str = ""
+    mission_type: str = ""
+    duration: str = ""
+    technical_skills: list[str] = []
+    soft_skills: list[str] = []
+    client_context: str = ""
     start_date: Optional[str] = None
     location: Optional[str] = None
     remote: Optional[str] = None
