@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 class AnalyzeRequest(BaseModel):
@@ -23,6 +23,16 @@ class RewrittenOffer(BaseModel):
     technical_skills: list[str] = []
     soft_skills: list[str] = []
     client_context: str = ""
+
+    @field_validator("title", "mission_type", "duration", "client_context", mode="before")
+    @classmethod
+    def none_to_str(cls, v: object) -> str:
+        return v if v is not None else ""
+
+    @field_validator("technical_skills", "soft_skills", "languages", mode="before")
+    @classmethod
+    def none_to_list(cls, v: object) -> list:
+        return v if v is not None else []
     start_date: Optional[str] = None
     location: Optional[str] = None
     remote: Optional[str] = None
