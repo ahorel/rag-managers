@@ -40,3 +40,7 @@ SERVEUR_ACCES.txt
 # Config runtime — contient des clés API
 backend/data/app_config.json
 backend/data/email_config.json
+
+# Besoins clients — données internes Orange (transférer via scp)
+backend/data/ao_clients/*
+!backend/data/ao_clients/.gitkeep

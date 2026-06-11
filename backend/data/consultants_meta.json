@@ -1,27 +1,328 @@
 {
-  "_comment": "Clé = nom du fichier CV sans extension. Tous les champs sont optionnels.",
-  "jean_dupont": {
-    "name": "Jean Dupont",
-    "title": "Architecte Cloud Senior",
-    "email": "jean.dupont@orange.com",
+  "_comment": "Clé = nom du fichier CV sans extension. Statuts: intercontrat | preavailable | en_mission",
+
+  "AP N - 20250201 - 20250605110457": {
+    "name": "AP N",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "AZ S - 20250602 - 20250605105719": {
+    "name": "AZ S",
+    "title": "Chef de Projet Confirmé",
+    "status": "en_mission",
+    "available": false,
+    "availability_date": "2026-09-01",
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr", "en"],
+    "domains": ["telecom", "industrie"],
+    "email": ""
+  },
+
+  "BA E - 20250301 - 20250605111334": {
+    "name": "BA E",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "BO S - 20241113 - 20250605105812": {
+    "name": "BO S",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "CE J - 20250301 - 20250605110140": {
+    "name": "CE J",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Lyon",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "CH M - 20241126 - 20250605110355": {
+    "name": "CH M",
+    "title": "",
+    "status": "preavailable",
+    "available": false,
+    "availability_date": "2026-07-01",
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "CH R - 20250501 - 20250605110612": {
+    "name": "CH R",
+    "title": "",
     "status": "intercontrat",
     "available": true,
     "availability_date": null,
     "location": "Paris",
     "remote": "partial",
     "languages": ["fr", "en"],
-    "domains": ["telecom", "finance"]
+    "domains": [],
+    "email": ""
   },
-  "marie_martin": {
-    "name": "Marie Martin",
-    "title": "Chef de Projet MOA",
-    "email": "marie.martin@orange.com",
-    "status": "en_mission",
-    "available": false,
-    "availability_date": "2026-08-01",
-    "location": "Lyon",
+
+  "EL B - 20241029 - 20250605111501": {
+    "name": "EL B",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
     "remote": "full",
     "languages": ["fr"],
-    "domains": ["assurance", "finance"]
+    "domains": [],
+    "email": ""
+  },
+
+  "EL N - 20250521 - 20250605110938": {
+    "name": "EL N",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "FA H - 20250515 - 20250605111115": {
+    "name": "FA H",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Bordeaux",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "FR L - 20250414 - 20250605112019": {
+    "name": "FR L",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "FT N - 20241113 - 20250605105056": {
+    "name": "FT N",
+    "title": "Product Owner",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr", "en"],
+    "domains": ["telecom", "finance", "assurance"],
+    "email": ""
+  },
+
+  "GO F - 20211201 - 20250605112156": {
+    "name": "GO F",
+    "title": "",
+    "status": "en_mission",
+    "available": false,
+    "availability_date": "2026-10-01",
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "HO A - 20241028 - 20250605111547": {
+    "name": "HO A",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "IS R - 20171211 - 20250605111246": {
+    "name": "IS R",
+    "title": "",
+    "status": "preavailable",
+    "available": false,
+    "availability_date": "2026-07-15",
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "IZ F - 20250602 - 20250605104712": {
+    "name": "IZ F",
+    "title": "Consultant AMOA",
+    "status": "en_mission",
+    "available": false,
+    "availability_date": "2026-09-01",
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr", "en"],
+    "domains": ["telecom", "finance", "assurance"],
+    "email": ""
+  },
+
+  "KE S - 20250403 - 20250605112104": {
+    "name": "KE S",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "LU L - 20250301 - 20250605111027": {
+    "name": "LU L",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Lyon",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "M' F - 20241113 - 20250605111202": {
+    "name": "M' F",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "MA S - 20250303 - 20250605110254": {
+    "name": "MA S",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "NZ V - 20250521 - 20250605110724": {
+    "name": "NZ V",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Rennes",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "RE S - 20250317 - 20250605105900": {
+    "name": "RE S",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr", "en"],
+    "domains": [],
+    "email": ""
+  },
+
+  "SA K - 20250429 - 20250605110018": {
+    "name": "SA K",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "SA L - 20250201 - 20250605110820": {
+    "name": "SA L",
+    "title": "",
+    "status": "preavailable",
+    "available": false,
+    "availability_date": "2026-06-30",
+    "location": "Nantes",
+    "remote": "full",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
+  },
+
+  "TC A - 20250401 - 20250605111701": {
+    "name": "TC A",
+    "title": "",
+    "status": "intercontrat",
+    "available": true,
+    "availability_date": null,
+    "location": "Paris",
+    "remote": "partial",
+    "languages": ["fr"],
+    "domains": [],
+    "email": ""
   }
 }
