@@ -5,6 +5,26 @@ from app.services.claude_service import generate_explanations, rewrite_offer
 from app.services.config_service import get_app_config
 from app.services.embeddings import embedding_service
 
+# Plage réelle de similarité cosinus pour paraphrase-multilingual-MiniLM-L12-v2
+# Sur des textes longs (CVs), le modèle ne dépasse jamais ~0.85 même pour un match parfait
+# et reste au-dessus de ~0.25 même pour des textes peu liés.
+_COSINE_FLOOR = 0.25
+_COSINE_CEIL  = 0.85
+
+
+def _calibrate_cosine(raw: float) -> float:
+    """Ramène la similarité cosinus brute dans la plage utile [0.0, 1.0]."""
+    return max(0.0, min(1.0, (raw - _COSINE_FLOOR) / (_COSINE_CEIL - _COSINE_FLOOR)))
+
+
+def _keyword_ratio(offer_skills: list[str], cv_text: str) -> float:
+    """Proportion des compétences de l'offre littéralement présentes dans le CV (0.0–1.0)."""
+    if not offer_skills:
+        return 0.0
+    cv_lower = cv_text.lower()
+    hits = sum(1 for s in offer_skills if s.lower() in cv_lower)
+    return hits / len(offer_skills)
+
 
 def _skill_match(offer_skills: list[str], cv_text: str) -> tuple[list[str], list[str]]:
     cv_lower = cv_text.lower()
@@ -56,7 +76,8 @@ def _score_availability(status: str | None, availability_date: str | None) -> in
             if delta <= 90: return 2
         except Exception:
             pass
-    return 0
+    # en_mission sans date connue : ressource pool, score neutre minimum
+    return 3
 
 
 def _score_location(
@@ -77,6 +98,17 @@ def _score_location(
         if tl in cl or cl in tl:
             score += 5
     return min(score, 5)
+
+
+def _max_possible_score(eff_domain: str | None, eff_location: str | None, eff_remote: str | None) -> int:
+    """Calcule le score maximum atteignable selon les critères actifs de la requête."""
+    max_score = 55  # compétences toujours présentes
+    if eff_domain:
+        max_score += 25
+    if eff_location or eff_remote:
+        max_score += 5
+    max_score += 15  # disponibilité : toujours dans le dénominateur (critère métier)
+    return max_score
 
 
 def _passes_hard_filters(
@@ -118,17 +150,36 @@ async def analyze_and_match(request: AnalyzeRequest) -> AnalyzeResponse:
 
     ranked = embedding_service.rank_by_similarity(query_text)
 
+    max_possible = _max_possible_score(eff_domain, eff_location, eff_remote)
+
     scored = []
     for r in ranked:
         if not _passes_hard_filters(r, request.filter_intercontrat_only, eff_languages):
             continue
-        skills_score = max(0, min(55, round(r["score"] * 55)))
+
+        # Score compétences : hybride 70% embedding sémantique + 30% matching direct
+        calibrated = _calibrate_cosine(r["score"])
+        kw_ratio   = _keyword_ratio(offer.technical_skills, r["text"])
+        hybrid     = calibrated * 0.70 + kw_ratio * 0.30
+        skills_score = max(0, min(55, round(hybrid * 55)))
+
         domain_score = _score_domain(r.get("domains", []), eff_domain)
         avail_score  = _score_availability(r.get("status"), r.get("availability_date"))
         loc_score    = _score_location(r.get("location"), r.get("remote"), eff_location, eff_remote)
-        total = skills_score + domain_score + avail_score + loc_score
-        scored.append({**r, "_total": total, "_skills": skills_score, "_domain": domain_score,
-                       "_avail": avail_score, "_loc": loc_score})
+
+        raw_total = skills_score + domain_score + avail_score + loc_score
+        # Normalisation : score affiché sur 100% du maximum atteignable pour cette requête
+        display_score = min(100, round(raw_total * 100 / max_possible))
+
+        scored.append({
+            **r,
+            "_total":        display_score,
+            "_raw":          raw_total,
+            "_skills":       skills_score,
+            "_domain":       domain_score,
+            "_avail":        avail_score,
+            "_loc":          loc_score,
+        })
 
     scored.sort(key=lambda x: x["_total"], reverse=True)
     top = scored[: request.max_results]
@@ -143,7 +194,7 @@ async def analyze_and_match(request: AnalyzeRequest) -> AnalyzeResponse:
             id=r["cv_id"],
             name=r["name"],
             title=_infer_title(r.get("title", ""), r["text"]),
-            score=min(100, r["_total"]),
+            score=r["_total"],
             matched_skills=_skill_match(all_skills, r["text"])[0],
             missing_skills=_skill_match(all_skills, r["text"])[1],
             explanation=explanations[i],
