@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 
 from app.config import settings
 from app.models import RewrittenOffer
@@ -79,6 +80,39 @@ def _effective_backend() -> str:
     return "demo"
 
 
+def _parse_and_validate(raw: str, backend: str) -> RewrittenOffer:
+    """Parse la réponse JSON du LLM et instancie RewrittenOffer avec logs détaillés."""
+    cleaned = _strip_markdown(raw)
+    logger.debug("[LLM:%s] Réponse brute (300 premiers chars) : %s", backend, cleaned[:300])
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        logger.error(
+            "[LLM:%s] JSON invalide — position %d, msg='%s' | raw=%s",
+            backend, exc.pos, exc.msg, cleaned[:500],
+        )
+        raise
+    logger.info(
+        "[LLM:%s] JSON parsé — champs présents: %s | nulls: %s",
+        backend,
+        list(parsed.keys()),
+        [k for k, v in parsed.items() if v is None],
+    )
+    try:
+        offer = RewrittenOffer.model_validate(parsed)
+    except Exception as exc:
+        logger.error(
+            "[LLM:%s] Validation Pydantic échouée — dict=%s | erreur=%s",
+            backend, parsed, exc,
+        )
+        raise
+    logger.info(
+        "[LLM:%s] RewrittenOffer OK — title='%s' mission_type='%s' skills=%s",
+        backend, offer.title, offer.mission_type, offer.technical_skills,
+    )
+    return offer
+
+
 # ── Anthropic ─────────────────────────────────────────────────────────────────
 
 def _anthropic_client():
@@ -87,6 +121,8 @@ def _anthropic_client():
 
 
 async def _anthropic_rewrite(mission_text: str) -> RewrittenOffer:
+    t0 = time.monotonic()
+    logger.info("[LLM:anthropic] Appel rewrite — %d chars d'entrée", len(mission_text))
     client = _anthropic_client()
     msg = await client.messages.create(
         model=settings.claude_model,
@@ -94,8 +130,8 @@ async def _anthropic_rewrite(mission_text: str) -> RewrittenOffer:
         system=_REWRITE_SYSTEM,
         messages=[{"role": "user", "content": _REWRITE_TEMPLATE.format(mission_text=mission_text[:4000])}],
     )
-    raw = _strip_markdown(msg.content[0].text)
-    return RewrittenOffer.model_validate(json.loads(raw))
+    logger.info("[LLM:anthropic] Réponse reçue en %.2fs", time.monotonic() - t0)
+    return _parse_and_validate(msg.content[0].text, "anthropic")
 
 
 async def _anthropic_explain_one(offer_summary: str, cv_text: str) -> str:
@@ -110,7 +146,7 @@ async def _anthropic_explain_one(offer_summary: str, cv_text: str) -> str:
         )
         return msg.content[0].text.strip()
     except Exception as e:
-        logger.error("Anthropic explanation failed: %s", e)
+        logger.error("[LLM:anthropic] explain_one échoué : %s", e)
         return "Profil correspondant aux exigences de la mission."
 
 
@@ -122,17 +158,20 @@ def _groq_client():
 
 
 async def _groq_rewrite(mission_text: str) -> RewrittenOffer:
+    t0 = time.monotonic()
+    model = _effective_groq_model()
+    logger.info("[LLM:groq] Appel rewrite — modèle=%s, %d chars d'entrée", model, len(mission_text))
     client = _groq_client()
     resp = await client.chat.completions.create(
-        model=_effective_groq_model(),
+        model=model,
         max_tokens=1024,
         messages=[
             {"role": "system", "content": _REWRITE_SYSTEM},
             {"role": "user", "content": _REWRITE_TEMPLATE.format(mission_text=mission_text[:4000])},
         ],
     )
-    raw = _strip_markdown(resp.choices[0].message.content)
-    return RewrittenOffer.model_validate(json.loads(raw))
+    logger.info("[LLM:groq] Réponse reçue en %.2fs", time.monotonic() - t0)
+    return _parse_and_validate(resp.choices[0].message.content, "groq")
 
 
 async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
@@ -147,7 +186,7 @@ async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        logger.error("Groq explanation failed: %s", e)
+        logger.error("[LLM:groq] explain_one échoué : %s", e)
         return "Profil correspondant aux exigences de la mission."
 
 
@@ -155,7 +194,7 @@ async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
 
 async def rewrite_offer(mission_text: str) -> RewrittenOffer:
     backend = _effective_backend()
-    logger.info("LLM backend: %s", backend)
+    logger.info("[rewrite_offer] Backend sélectionné : %s", backend)
     if backend == "groq":
         return await _groq_rewrite(mission_text)
     if backend == "anthropic":
