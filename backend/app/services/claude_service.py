@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 import time
 
 from app.config import settings
@@ -21,6 +22,10 @@ Analyse ce texte (email client, expression de besoin ou fiche de poste) et struc
 Texte :
 {mission_text}
 
+RÈGLE OBLIGATOIRE : Dans "technical_skills", tu dois inclure le langage, la technologie ou l'outil
+PRINCIPAL cité dans le texte. Exemple : texte "développeur Java sénior" → "Java" DOIT figurer dans
+technical_skills. Ne l'omets jamais même s'il est dans le titre du poste.
+
 Retourne UNIQUEMENT ce JSON (aucun autre texte) :
 {{
   "title": "intitulé exact du poste",
@@ -31,7 +36,7 @@ Retourne UNIQUEMENT ce JSON (aucun autre texte) :
   "remote": "full | partial | none | null",
   "languages": ["fr"],
   "domain": "industrie | telecom | innovation | mobilite | finance | assurance | null",
-  "technical_skills": ["compétence1", "compétence2"],
+  "technical_skills": ["technologie principale (ex: Java, Python…)", "autre compétence"],
   "soft_skills": ["softskill1", "softskill2"],
   "client_context": "contexte client en 1-2 phrases"
 }}"""
@@ -43,6 +48,42 @@ CV (extrait) :
 {cv_excerpt}
 
 En une seule phrase française concise (max 20 mots), explique pourquoi ce consultant correspond à cette mission."""
+
+
+# Technologies connues à chercher dans le titre si absentes des skills
+_TECH_KEYWORDS = {
+    "java", "python", "javascript", "typescript", "go", "golang", "rust",
+    "scala", "kotlin", "c#", ".net", "php", "ruby", "swift", "c++",
+    "react", "angular", "vue", "vuejs", "svelte",
+    "spring", "spring boot", "django", "flask", "fastapi", "quarkus",
+    "node", "nodejs", "express",
+    "aws", "azure", "gcp",
+    "docker", "kubernetes", "terraform", "ansible",
+    "sql", "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
+    "kafka", "rabbitmq", "spark", "hadoop", "databricks",
+    "git", "jenkins", "gitlab", "sonarqube",
+    "sap", "salesforce", "oracle",
+    "maven", "gradle", "junit", "pytest",
+    "html", "css", "linux", "bash",
+    "moa", "amoa", "erp", "crm",
+    "bgp", "mpls",
+}
+
+
+def _inject_missing_tech(offer: "RewrittenOffer") -> "RewrittenOffer":
+    """Injecte dans technical_skills les technologies du titre absentes de la liste."""
+    existing_lower = {s.lower() for s in offer.technical_skills}
+    new_techs = []
+    for tech in _TECH_KEYWORDS:
+        if tech in existing_lower:
+            continue
+        m = re.search(r"\b" + re.escape(tech) + r"\b", offer.title, re.IGNORECASE)
+        if m:
+            new_techs.append(m.group(0))
+    if new_techs:
+        logger.info("[LLM] Technologies injectées depuis le titre '%s' : %s", offer.title, new_techs)
+        return offer.model_copy(update={"technical_skills": offer.technical_skills + new_techs})
+    return offer
 
 
 def _strip_markdown(text: str) -> str:
@@ -106,6 +147,7 @@ def _parse_and_validate(raw: str, backend: str) -> RewrittenOffer:
             backend, parsed, exc,
         )
         raise
+    offer = _inject_missing_tech(offer)
     logger.info(
         "[LLM:%s] RewrittenOffer OK — title='%s' mission_type='%s' skills=%s",
         backend, offer.title, offer.mission_type, offer.technical_skills,
@@ -195,11 +237,26 @@ async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
 async def rewrite_offer(mission_text: str) -> RewrittenOffer:
     backend = _effective_backend()
     logger.info("[rewrite_offer] Backend sélectionné : %s", backend)
-    if backend == "groq":
-        return await _groq_rewrite(mission_text)
-    if backend == "anthropic":
-        return await _anthropic_rewrite(mission_text)
-    return await demo_rewrite_offer(mission_text)
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            if attempt > 0:
+                await asyncio.sleep(3)
+                logger.info("[rewrite_offer] Retry %d…", attempt + 1)
+            if backend == "groq":
+                return await _groq_rewrite(mission_text)
+            if backend == "anthropic":
+                return await _anthropic_rewrite(mission_text)
+            return await demo_rewrite_offer(mission_text)
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("[rewrite_offer] Tentative %d échouée : %s", attempt + 1, exc)
+    # Fallback : offre minimale — le matching continue sur le texte brut
+    logger.error("[rewrite_offer] 2 tentatives échouées, offre par défaut. Erreur : %s", last_exc)
+    return RewrittenOffer(
+        title=mission_text[:80].strip(),
+        client_context=mission_text[:300],
+    )
 
 
 async def generate_explanations(offer_summary: str, cv_texts: list[str]) -> list[str]:

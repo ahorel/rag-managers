@@ -1,0 +1,169 @@
+================================================================================
+  MATCHCONSULT — COMMANDES SERVEUR OVH
+  Serveur : 51.83.44.48  |  User : ubuntu  |  App : ~/rag-managers
+================================================================================
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. CONNEXION AU SERVEUR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Ouvrir un terminal PowerShell et se connecter en SSH
+  ssh ubuntu@51.83.44.48
+
+  # Aller dans le répertoire de l'application (à faire après chaque connexion)
+  cd ~/rag-managers
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  2. MISE À JOUR DU CODE (déployer depuis GitHub)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Récupérer la dernière version de la branche de déploiement
+  git pull
+
+  # Vérifier la branche active
+  git branch
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  3. DÉMARRER L'APPLICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Premier démarrage OU après modification du code (rebuild des images)
+  docker compose up -d --build
+
+  # Redémarrage simple sans rebuild (code inchangé)
+  docker compose up -d
+
+  # Arrêter tous les conteneurs
+  docker compose down
+
+  # Arrêter ET supprimer les volumes (reset complet — CVs re-indexés au redémarrage)
+  docker compose down -v
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  4. VÉRIFIER L'ÉTAT DES CONTENEURS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # État de tous les conteneurs (running / healthy / unhealthy)
+  docker ps
+
+  # Santé du backend uniquement (healthy = modèle chargé + CVs indexés)
+  docker inspect matchconsult_backend --format='{{.State.Health.Status}}'
+
+  # Détail du dernier healthcheck (log + exit code)
+  docker inspect matchconsult_backend --format='{{json .State.Health}}' | python3 -m json.tool
+
+  # Appel direct à l'API de santé
+  curl -s http://localhost:8000/api/health | python3 -m json.tool
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  5. MONITORING DES LOGS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Logs du backend en temps réel (Ctrl+C pour quitter)
+  docker compose logs -f backend
+
+  # Logs du backend — 100 dernières lignes seulement
+  docker compose logs --tail=100 backend
+
+  # Logs de tous les services en temps réel
+  docker compose logs -f
+
+  # Logs du frontend
+  docker compose logs -f frontend
+
+  # Logs de Qdrant (base vectorielle)
+  docker compose logs -f qdrant
+
+  # Filtrer les erreurs dans les logs backend
+  docker compose logs backend 2>&1 | grep -i "error\|warning\|exception\|500"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  6. LANCER LA BATTERIE DE TESTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Lancer les tests (démarre après que le backend soit healthy)
+  # Les résultats sont envoyés par mail à arthur.horel@gmail.com
+  docker compose --profile test run --rm tests
+
+  # Voir le dernier rapport JSON généré sur le serveur
+  cat tests/results/latest.json | python3 -m json.tool
+
+  # Voir la liste de tous les rapports générés
+  ls -lh tests/results/
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  7. DÉPLOYER UNE MISE À JOUR COMPLÈTE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Séquence complète : arrêt → maj code → rebuild → redémarrage → tests
+  docker compose down
+  git pull
+  docker compose up -d --build
+  # Attendre que le healthcheck passe à "healthy" (environ 2-3 min)
+  watch -n 5 "docker inspect matchconsult_backend --format='{{.State.Health.Status}}'"
+  # Ctrl+C quand "healthy" s'affiche, puis lancer les tests :
+  docker compose --profile test run --rm tests
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  8. TRANSFÉRER DES FICHIERS DEPUIS VOTRE POSTE (PowerShell local)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Copier un CV sur le serveur
+  scp "C:\chemin\vers\cv.pdf" ubuntu@51.83.44.48:~/rag-managers/backend/data/cvs/
+
+  # Copier plusieurs CVs (tous les PDF d'un dossier)
+  scp "C:\chemin\vers\cvs\*.pdf" ubuntu@51.83.44.48:~/rag-managers/backend/data/cvs/
+
+  # Copier un fichier AO client
+  scp "C:\chemin\vers\ao.pdf" ubuntu@51.83.44.48:~/rag-managers/backend/data/ao_clients/
+
+  # Copier le fichier de métadonnées consultants
+  scp "C:\chemin\vers\consultants_meta.json" ubuntu@51.83.44.48:~/rag-managers/backend/data/
+
+  # Télécharger le rapport de test depuis le serveur
+  scp ubuntu@51.83.44.48:~/rag-managers/tests/results/latest.json "C:\Users\WCXV8632\Downloads\"
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  9. DEBUGGING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  # Ouvrir un shell dans le conteneur backend
+  docker exec -it matchconsult_backend bash
+
+  # Tester manuellement l'API de matching (remplacer le texte)
+  curl -s -X POST http://localhost:8000/api/analyze-mission \
+    -H "Content-Type: application/json" \
+    -d '{"mission_text": "Développeur Java senior Spring Boot 8 ans expérience"}' \
+    | python3 -m json.tool
+
+  # Voir l'utilisation mémoire/CPU des conteneurs
+  docker stats --no-stream
+
+  # Espace disque utilisé par Docker
+  docker system df
+
+  # Redémarrer uniquement le backend (sans reconstruire)
+  docker compose restart backend
+
+  # Reconstruire uniquement le backend
+  docker compose up -d --build backend
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  10. ACCÈS WEB
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Interface MatchConsult  : http://51.83.44.48
+  API backend             : http://51.83.44.48:8000
+  API santé               : http://51.83.44.48:8000/api/health
+  Dashboard Qdrant        : http://51.83.44.48:6333/dashboard
+
+================================================================================
