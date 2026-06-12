@@ -95,7 +95,7 @@ async def _anthropic_rewrite(mission_text: str) -> RewrittenOffer:
         messages=[{"role": "user", "content": _REWRITE_TEMPLATE.format(mission_text=mission_text[:4000])}],
     )
     raw = _strip_markdown(msg.content[0].text)
-    return RewrittenOffer(**json.loads(raw))
+    return RewrittenOffer.model_validate(json.loads(raw))
 
 
 async def _anthropic_explain_one(offer_summary: str, cv_text: str) -> str:
@@ -132,7 +132,7 @@ async def _groq_rewrite(mission_text: str) -> RewrittenOffer:
         ],
     )
     raw = _strip_markdown(resp.choices[0].message.content)
-    return RewrittenOffer(**json.loads(raw))
+    return RewrittenOffer.model_validate(json.loads(raw))
 
 
 async def _groq_explain_one(offer_summary: str, cv_text: str) -> str:
