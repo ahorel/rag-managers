@@ -34,8 +34,9 @@ sentence_transformers_models/
 .DS_Store
 Thumbs.db
 
-# Accès serveur — ne jamais commiter
+# Accès serveur et credentials — ne jamais commiter
 SERVEUR_ACCES.txt
+SMTP_ACCES.txt
 
 # Config runtime — contient des clés API
 backend/data/app_config.json
