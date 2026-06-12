@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from pathlib import Path
 
 from sentence_transformers import SentenceTransformer
@@ -12,6 +13,24 @@ from app.services.cv_parser import SUPPORTED_EXTENSIONS, extract_text, name_from
 logger = logging.getLogger(__name__)
 
 _META_FILE   = Path(settings.cv_directory).parent / "consultants_meta.json"
+
+
+def _extract_years_from_text(text: str) -> int | None:
+    """Extrait le nombre total d'années d'expérience depuis le texte brut du CV."""
+    patterns = [
+        r"(\d+)\s*ans?\s+d['’]exp[eé]rience",  # "15 ans d'expérience"
+        r"exp[eé]rience\s+de\s+(\d+)\s*ans?",        # "expérience de 15 ans"
+        r"(\d+)\s*years?\s+of\s+experience",           # "15 years of experience"
+    ]
+    for pat in patterns:
+        m = re.search(pat, text[:3000], re.IGNORECASE)
+        if m:
+            val = int(m.group(1))
+            if 1 <= val <= 50:
+                return val
+    return None
+
+
 _MODEL_NAME  = "paraphrase-multilingual-MiniLM-L12-v2"
 _MAX_CHARS   = 6000
 _VECTOR_SIZE = 384
@@ -84,23 +103,25 @@ class EmbeddingService:
                 cv_meta   = meta.get(cv_id, {})
                 available = cv_meta.get("available", True)
                 status    = cv_meta.get("status", "intercontrat" if available else "en_mission")
+                years_exp = _extract_years_from_text(text)
                 points.append(PointStruct(
                     id=idx,
                     vector=embedding.tolist(),
                     payload={
-                        "cv_id":            cv_id,
-                        "name":             cv_meta.get("name", name_from_filename(cv_path.name)),
-                        "title":            cv_meta.get("title", ""),
-                        "available":        available,
-                        "status":           status,
+                        "cv_id":             cv_id,
+                        "name":              cv_meta.get("name", name_from_filename(cv_path.name)),
+                        "title":             cv_meta.get("title", ""),
+                        "available":         available,
+                        "status":            status,
                         "availability_date": cv_meta.get("availability_date"),
-                        "location":         cv_meta.get("location"),
-                        "remote":           cv_meta.get("remote", "partial"),
-                        "languages":        cv_meta.get("languages", ["fr"]),
-                        "domains":          cv_meta.get("domains", []),
-                        "email":            cv_meta.get("email"),
-                        "text":             text,
-                        "filename":         cv_path.name,
+                        "location":          cv_meta.get("location"),
+                        "remote":            cv_meta.get("remote", "partial"),
+                        "languages":         cv_meta.get("languages", ["fr"]),
+                        "domains":           cv_meta.get("domains", []),
+                        "email":             cv_meta.get("email"),
+                        "years_experience":  years_exp,
+                        "text":              text,
+                        "filename":          cv_path.name,
                     },
                 ))
                 idx += 1
@@ -113,7 +134,7 @@ class EmbeddingService:
         self._cv_count = len(points)
         logger.info("Indexed %d CVs into Qdrant (%s).", self._cv_count, _COLLECTION)
 
-    def rank_by_similarity(self, query_text: str) -> list[dict]:
+    def rank_by_similarity(self, query_text: str, qdrant_filter=None) -> list[dict]:
         if self.qdrant is None or self.model is None:
             return []
 
@@ -123,6 +144,7 @@ class EmbeddingService:
             query_vector=query_emb,
             limit=50,
             with_payload=True,
+            query_filter=qdrant_filter,
         )
 
         return [{**hit.payload, "score": hit.score} for hit in hits]
