@@ -29,22 +29,11 @@ services:
     depends_on:
       - qdrant
     healthcheck:
-      # Vérifie que le modèle est chargé ET que des CVs sont indexés
-      test:
-        - "CMD-SHELL"
-        - >
-          python3 -c "
-          import urllib.request, json, sys
-          try:
-              d = json.loads(urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).read())
-              sys.exit(0 if d.get('model_ready') and d.get('cvs_loaded', 0) > 0 else 1)
-          except Exception:
-              sys.exit(1)
-          "
-      interval: 15s      # vérifie toutes les 15 secondes
-      timeout: 10s       # abandon si pas de réponse en 10s
-      retries: 20        # jusqu'à 20 tentatives (= 5 minutes max)
-      start_period: 120s # laisse 2 minutes au premier démarrage (chargement modèle + CVs)
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request,json,sys; d=json.loads(urllib.request.urlopen('http://localhost:8000/api/health',timeout=5).read()); sys.exit(0 if d.get('model_ready') and d.get('cvs_loaded',0)>0 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
 
   frontend:
     build:
