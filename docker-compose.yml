@@ -66,6 +66,12 @@ services:
     volumes:
       - ./tests:/tests:ro                    # script en lecture seule
       - ./tests/results:/tests/results:rw    # résultats en écriture
+    environment:
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_RECIPIENTS=${SMTP_RECIPIENTS:-}
     command: python3 /tests/run_scenarios.py http://backend:8000
     depends_on:
       backend:

@@ -13,18 +13,29 @@ Aucune dépendance externe — uniquement la stdlib Python 3.
 
 import json
 import os
+import smtplib
 import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Any
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BASE_URL = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:8000"
 TIMEOUT  = 90   # secondes — appels LLM peuvent être lents
+
+# Credentials email — injectés via variables d'environnement (fichier .env serveur)
+SMTP_HOST       = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT       = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER       = os.environ.get("SMTP_USER", "")
+SMTP_PASSWORD   = os.environ.get("SMTP_PASSWORD", "")
+SMTP_RECIPIENTS = [r.strip() for r in os.environ.get("SMTP_RECIPIENTS", "").split(",") if r.strip()]
 
 # ── Couleurs terminal ─────────────────────────────────────────────────────────
 
@@ -410,6 +421,93 @@ SCENARIOS = [
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
+def send_report_email(report_path: str, report: dict):
+    """Envoie le rapport par email. Ne fait rien si SMTP_USER est absent."""
+    if not SMTP_USER or not SMTP_PASSWORD or not SMTP_RECIPIENTS:
+        print(f"  {warn('Email non configuré — définir SMTP_USER/SMTP_PASSWORD/SMTP_RECIPIENTS dans .env')}")
+        return
+
+    passed   = report["summary"]["passed"]
+    total    = report["summary"]["total"]
+    failed   = report["summary"]["failed"]
+    date_str = datetime.now().strftime("%d/%m/%Y %H:%M")
+    status   = "✅ TOUS RÉUSSIS" if failed == 0 else f"⚠️ {failed} ÉCHEC(S)"
+    subject  = f"MatchConsult — Tests {date_str} — {passed}/{total} {status}"
+
+    rows = ""
+    for s in report["scenarios"]:
+        icon  = "✅" if s["passed"] else "❌"
+        color = "#d4edda" if s["passed"] else "#f8d7da"
+        top   = s["consultants"][0] if s["consultants"] else None
+        top_str = (
+            f"{top['name']} — {top['score']}% "
+            f"(skills={top['score_detail'].get('skills',0)} "
+            f"dom={top['score_detail'].get('domain',0)} "
+            f"dispo={top['score_detail'].get('availability',0)})"
+        ) if top else "—"
+        issues_str = "<br>".join(s["issues"]) if s["issues"] else "—"
+        rows += f"""
+        <tr style="background:{color}">
+          <td style="padding:6px 10px">{icon} {s['name']}</td>
+          <td style="padding:6px 10px">{s['duration_s']}s</td>
+          <td style="padding:6px 10px">{top_str}</td>
+          <td style="padding:6px 10px;color:#c00">{issues_str}</td>
+        </tr>"""
+
+    html = f"""<html><body style="font-family:Arial,sans-serif;font-size:14px">
+    <h2 style="color:#333">MatchConsult — Rapport de tests</h2>
+    <p>Date : <b>{date_str}</b><br>
+       API  : <code>{report['api_url']}</code><br>
+       CVs chargés : <b>{report['health'].get('cvs_loaded','?')}</b></p>
+    <table style="background:#eaf4fb;padding:12px;border-radius:6px;margin-bottom:16px">
+      <tr>
+        <td style="padding:4px 16px;font-size:22px;font-weight:bold;
+                   color:{'#28a745' if failed==0 else '#dc3545'}">
+          {passed}/{total} scénarios réussis
+        </td>
+        <td style="padding:4px 16px;color:#555">
+          Durée totale : {report['summary']['duration_total_s']}s
+        </td>
+      </tr>
+    </table>
+    <table border="1" cellspacing="0" cellpadding="0"
+           style="border-collapse:collapse;width:100%;font-size:13px">
+      <thead>
+        <tr style="background:#343a40;color:white">
+          <th style="padding:8px 10px;text-align:left">Scénario</th>
+          <th style="padding:8px 10px;text-align:left">Durée</th>
+          <th style="padding:8px 10px;text-align:left">Meilleur résultat</th>
+          <th style="padding:8px 10px;text-align:left">Problèmes</th>
+        </tr>
+      </thead>
+      <tbody>{rows}</tbody>
+    </table>
+    <p style="color:#888;font-size:12px;margin-top:20px">
+      Rapport JSON complet en pièce jointe.
+    </p>
+    </body></html>"""
+
+    msg = MIMEMultipart("mixed")
+    msg["Subject"] = subject
+    msg["From"]    = f"MatchConsult Tests <{SMTP_USER}>"
+    msg["To"]      = ", ".join(SMTP_RECIPIENTS)
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    with open(report_path, "rb") as f:
+        att = MIMEApplication(f.read(), Name=os.path.basename(report_path))
+    att["Content-Disposition"] = f'attachment; filename="{os.path.basename(report_path)}"'
+    msg.attach(att)
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as smtp:
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASSWORD)
+            smtp.sendmail(SMTP_USER, SMTP_RECIPIENTS, msg.as_bytes())
+        print(f"  {ok('Email envoyé → ' + ', '.join(SMTP_RECIPIENTS))}")
+    except Exception as exc:
+        print(f"  {warn(f'Envoi email échoué : {exc}')}")
+
+
 def save_report(health: dict, exit_code: int) -> str | None:
     """Écrit le rapport JSON dans tests/results/ et retourne le chemin du fichier."""
     results_dir = os.path.join(os.path.dirname(__file__), "results")
@@ -540,6 +638,12 @@ def main():
     if report_path:
         print(f"  {B}Rapport JSON{RST} : {report_path}")
         print(f"  {B}Dernier rapport{RST} : {os.path.join(os.path.dirname(report_path), 'latest.json')}\n")
+
+    # Chargement du rapport pour l'email
+    if report_path:
+        with open(report_path, encoding="utf-8") as f:
+            report_data = json.load(f)
+        send_report_email(report_path, report_data)
 
     sys.exit(exit_code)
 

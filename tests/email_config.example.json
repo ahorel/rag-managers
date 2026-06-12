@@ -1,0 +1,10 @@
+{
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_user": "votre-adresse@gmail.com",
+  "smtp_password": "xxxx xxxx xxxx xxxx",
+  "sender_name": "MatchConsult Tests",
+  "recipients": [
+    "arthur.horel@gmail.com"
+  ]
+}
