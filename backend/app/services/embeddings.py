@@ -54,12 +54,19 @@ class EmbeddingService:
         self._ensure_model()
         self._ensure_qdrant()
 
-        if self.qdrant.collection_exists(_COLLECTION):
+        # Suppression + recréation tolérante aux race conditions (2 workers uvicorn)
+        try:
             self.qdrant.delete_collection(_COLLECTION)
-        self.qdrant.create_collection(
-            collection_name=_COLLECTION,
-            vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
-        )
+        except Exception:
+            pass
+        try:
+            self.qdrant.create_collection(
+                collection_name=_COLLECTION,
+                vectors_config=VectorParams(size=_VECTOR_SIZE, distance=Distance.COSINE),
+            )
+        except Exception:
+            # Un autre worker a déjà recréé la collection — on continue
+            logger.warning("Collection déjà créée par un autre worker, on continue.")
 
         meta   = self._load_meta()
         points = []
