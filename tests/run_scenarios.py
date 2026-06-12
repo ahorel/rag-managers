@@ -122,12 +122,17 @@ def print_consultants(consultants: list[dict], max_show: int = 5):
         scolor = G if status == "intercontrat" else (Y if status == "preavailable" else R)
         bar_n  = round(c["score"] / 5)
         bar    = f"{G}{'█' * bar_n}{DIM}{'░' * (20 - bar_n)}{RST}"
+        score_str = (
+            f"skills={d.get('skills',0):>2} dom={d.get('domain',0):>2}"
+            f" dispo={d.get('availability',0):>2} loc={d.get('location',0):>1}"
+        )
+        sep = '└' if i == min(max_show, len(consultants)) - 1 else '├'
         print(
-            f"   {'└' if i == min(max_show, len(consultants)) - 1 else '├'}─ "
+            f"   {sep}─ "
             f"{BOLD}{c['name'][:28]:<28}{RST}  "
             f"{bar} {BOLD}{c['score']:>3}%{RST}  "
             f"{scolor}{status:<12}{RST}  "
-            f"{dim(f'skills={d.get(\"skills\",0):>2} dom={d.get(\"domain\",0):>2} dispo={d.get(\"availability\",0):>2} loc={d.get(\"location\",0):>1}')}"
+            f"{dim(score_str)}"
         )
         matched = c.get("matched_skills", [])
         if matched:
