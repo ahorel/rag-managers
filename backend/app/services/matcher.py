@@ -121,7 +121,7 @@ def _passes_hard_filters(
     filter_languages: list[str],
 ) -> bool:
     if filter_intercontrat_only:
-        if r.get("status", "intercontrat") == "en_mission" and not r.get("availability_date"):
+        if r.get("status", "intercontrat") == "en_mission":
             return False
     if filter_languages:
         if not any(lang in r.get("languages", ["fr"]) for lang in filter_languages):

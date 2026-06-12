@@ -36,12 +36,18 @@ class RewrittenOffer(BaseModel):
             return data
         str_fields = ("title", "mission_type", "duration", "client_context")
         list_fields = ("technical_skills", "soft_skills", "languages")
+        # Valeurs placeholder que le LLM renvoie parfois litteralement
+        _PLACEHOLDERS = {"softskill1", "softskill2", "compétence1", "compétence2",
+                         "null", "none", "n/a", "na"}
         for f in str_fields:
             if data.get(f) is None:
                 data[f] = ""
         for f in list_fields:
-            if data.get(f) is None:
+            val = data.get(f)
+            if val is None:
                 data[f] = []
+            elif isinstance(val, list):
+                data[f] = [v for v in val if isinstance(v, str) and v.lower() not in _PLACEHOLDERS]
         return data
 
 
