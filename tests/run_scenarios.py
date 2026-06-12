@@ -12,11 +12,13 @@ Aucune dépendance externe — uniquement la stdlib Python 3.
 """
 
 import json
+import os
 import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 # ── Config ────────────────────────────────────────────────────────────────────
@@ -75,11 +77,15 @@ def http_post(path: str, payload: dict) -> tuple[int, dict]:
 
 @dataclass
 class ScenarioResult:
-    name:     str
-    passed:   bool
-    duration: float
-    checks:   list[str] = field(default_factory=list)
-    issues:   list[str] = field(default_factory=list)
+    name:         str
+    passed:       bool
+    duration:     float
+    checks:       list[str]  = field(default_factory=list)
+    issues:       list[str]  = field(default_factory=list)
+    http_status:  int        = 0
+    payload:      dict       = field(default_factory=dict)
+    offer:        dict       = field(default_factory=dict)
+    consultants:  list[dict] = field(default_factory=list)
 
 
 all_results: list[ScenarioResult] = []
@@ -128,7 +134,14 @@ def run_scenario(name: str, payload: dict,
     status, data = http_post("/api/analyze", payload)
     dur = time.monotonic() - t0
 
-    result = ScenarioResult(name=name, passed=True, duration=dur)
+    offer       = data.get("rewritten_offer", {})
+    consultants = data.get("consultants", [])
+
+    result = ScenarioResult(
+        name=name, passed=True, duration=dur,
+        http_status=status, payload=payload,
+        offer=offer, consultants=consultants,
+    )
 
     if status != expect_http:
         result.passed = False
@@ -138,9 +151,6 @@ def run_scenario(name: str, payload: dict,
         return result
 
     print(f"   {ok(f'HTTP {status}  ({dur:.1f}s)')}")
-
-    offer       = data.get("rewritten_offer", {})
-    consultants = data.get("consultants", [])
 
     print_offer(offer)
     print()
@@ -400,6 +410,81 @@ SCENARIOS = [
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
 
+def save_report(health: dict, exit_code: int) -> str | None:
+    """Écrit le rapport JSON dans tests/results/ et retourne le chemin du fichier."""
+    results_dir = os.path.join(os.path.dirname(__file__), "results")
+    os.makedirs(results_dir, exist_ok=True)
+
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = os.path.join(results_dir, f"report_{ts}.json")
+
+    report = {
+        "date":        datetime.now().isoformat(),
+        "api_url":     BASE_URL,
+        "exit_code":   exit_code,
+        "summary": {
+            "total":   len(all_results),
+            "passed":  sum(1 for r in all_results if r.passed),
+            "failed":  sum(1 for r in all_results if not r.passed),
+            "duration_total_s": round(sum(r.duration for r in all_results), 2),
+        },
+        "health": health,
+        "scenarios": [
+            {
+                "name":        r.name,
+                "passed":      r.passed,
+                "duration_s":  round(r.duration, 2),
+                "http_status": r.http_status,
+                "payload":     r.payload,
+                "issues":      r.issues,
+                "checks":      r.checks,
+                "offer": {
+                    "title":            r.offer.get("title", ""),
+                    "mission_type":     r.offer.get("mission_type", ""),
+                    "duration":         r.offer.get("duration", ""),
+                    "domain":           r.offer.get("domain"),
+                    "technical_skills": r.offer.get("technical_skills", []),
+                    "soft_skills":      r.offer.get("soft_skills", []),
+                    "location":         r.offer.get("location"),
+                    "remote":           r.offer.get("remote"),
+                    "languages":        r.offer.get("languages", []),
+                    "client_context":   r.offer.get("client_context", ""),
+                },
+                "consultants": [
+                    {
+                        "rank":             i + 1,
+                        "name":             c.get("name", ""),
+                        "title":            c.get("title", ""),
+                        "score":            c.get("score", 0),
+                        "status":           c.get("status", ""),
+                        "available":        c.get("available", False),
+                        "availability_date": c.get("availability_date"),
+                        "location":         c.get("location"),
+                        "languages":        c.get("languages", []),
+                        "domains":          c.get("domains", []),
+                        "matched_skills":   c.get("matched_skills", []),
+                        "missing_skills":   c.get("missing_skills", []),
+                        "explanation":      c.get("explanation", ""),
+                        "score_detail":     c.get("score_detail", {}),
+                    }
+                    for i, c in enumerate(r.consultants)
+                ],
+            }
+            for r in all_results
+        ],
+    }
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    # Écrase aussi latest.json pour accès rapide
+    latest = os.path.join(results_dir, "latest.json")
+    with open(latest, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+
+    return path
+
+
 def main():
     print(f"\n{BOLD}{'═'*68}{RST}")
     print(f"{BOLD}  MatchConsult — Scénarios de test d'intégration{RST}")
@@ -411,6 +496,7 @@ def main():
     status, health = http_get("/api/health")
     if status != 200:
         print(f"  {err(f'API inaccessible (HTTP {status}) — lancer docker compose up -d')}")
+        save_report(health={}, exit_code=2)
         sys.exit(2)
     n_cvs = health.get("cvs_loaded", 0)
     ready = health.get("model_ready", False)
@@ -419,6 +505,7 @@ def main():
     print(f"  {ok('Modèle prêt') if ready else err('Modèle non prêt')}")
     if n_cvs == 0 or not ready:
         print(f"\n  {R}Application non prête — tests annulés.{RST}")
+        save_report(health=health, exit_code=2)
         sys.exit(2)
 
     # ── Scénarios ─────────────────────────────────────────────────────────────
@@ -448,7 +535,13 @@ def main():
     print(f"  Durée totale : {total_t:.1f}s")
     print(f"{'═'*68}{RST}\n")
 
-    sys.exit(0 if not failed else 1)
+    exit_code = 0 if not failed else 1
+    report_path = save_report(health=health, exit_code=exit_code)
+    if report_path:
+        print(f"  {B}Rapport JSON{RST} : {report_path}")
+        print(f"  {B}Dernier rapport{RST} : {os.path.join(os.path.dirname(report_path), 'latest.json')}\n")
+
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

@@ -44,3 +44,6 @@ backend/data/email_config.json
 # Besoins clients — données internes Orange (transférer via scp)
 backend/data/ao_clients/*
 !backend/data/ao_clients/.gitkeep
+
+# Rapports de tests — générés à l'exécution
+tests/results/*.json
