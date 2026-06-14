@@ -3,6 +3,7 @@ import { NavBar } from "./components/NavBar";
 import { MissionInput } from "./components/MissionInput";
 import { ResultsPage } from "./components/ResultsPage";
 import { AdminConfig } from "./components/AdminConfig";
+import { AdminGate } from "./components/AdminGate";
 import { analyzeMission, checkHealth } from "./api/client";
 import type { AnalyzeRequest, AnalyzeResponse } from "./types";
 
@@ -53,10 +54,12 @@ function AnalyzingScreen() {
 }
 
 export default function App() {
-  const [screen, setScreen]   = useState<Screen>("input");
-  const [results, setResults] = useState<AnalyzeResponse | null>(null);
-  const [error, setError]     = useState<string | null>(null);
-  const [totalCvs, setTotalCvs] = useState(0);
+  const [screen, setScreen]         = useState<Screen>("input");
+  const [results, setResults]       = useState<AnalyzeResponse | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [totalCvs, setTotalCvs]     = useState(0);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [showGate, setShowGate]     = useState(false);
 
   useEffect(() => {
     checkHealth().then((h) => setTotalCvs(h.cvs_loaded)).catch(() => {});
@@ -77,12 +80,22 @@ export default function App() {
   };
 
   const handleBack  = () => { setScreen("input"); setError(null); };
-  const handleAdmin = () => setScreen(screen === "admin" ? "input" : "admin");
   const handleHome  = () => { setScreen("input"); setError(null); };
+  const handleAdmin = () => {
+    if (screen === "admin") { setScreen("input"); return; }
+    if (adminUnlocked) { setScreen("admin"); return; }
+    setShowGate(true);
+  };
 
   return (
     <>
       <NavBar onAdmin={handleAdmin} isAdmin={screen === "admin"} onHome={handleHome} />
+      {showGate && (
+        <AdminGate
+          onUnlock={() => { setAdminUnlocked(true); setShowGate(false); setScreen("admin"); }}
+          onCancel={() => setShowGate(false)}
+        />
+      )}
 
       {error && (
         <div style={{
