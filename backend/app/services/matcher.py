@@ -19,7 +19,7 @@ _COSINE_CEIL  = 0.90
 
 # Seuil minimum de score compétences (sur 65) pour qu'un profil soit retenu.
 # Élimine les profils hors-sujet qui remontent uniquement grâce au domaine/disponibilité.
-_MIN_SKILLS_SCORE = 15
+_MIN_SKILLS_SCORE = 22
 
 # Synonymes pour le keyword matching — évite de rater "RL" quand l'offre dit
 # "Reinforcement learning", ou "NLP" quand le CV dit "traitement du langage".
