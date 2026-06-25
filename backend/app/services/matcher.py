@@ -13,10 +13,49 @@ from app.services.embeddings import embedding_service
 logger = logging.getLogger(__name__)
 
 # Plage réelle de similarité cosinus pour paraphrase-multilingual-MiniLM-L12-v2
-# Sur des textes longs (CVs), le modèle ne dépasse jamais ~0.85 même pour un match parfait
-# et reste au-dessus de ~0.25 même pour des textes peu liés.
+# Avec chunking sémantique les chunks sont plus focalisés → plafond légèrement plus haut.
 _COSINE_FLOOR = 0.25
-_COSINE_CEIL  = 0.85
+_COSINE_CEIL  = 0.90
+
+# Seuil minimum de score compétences (sur 65) pour qu'un profil soit retenu.
+# Élimine les profils hors-sujet qui remontent uniquement grâce au domaine/disponibilité.
+_MIN_SKILLS_SCORE = 15
+
+# Synonymes pour le keyword matching — évite de rater "RL" quand l'offre dit
+# "Reinforcement learning", ou "NLP" quand le CV dit "traitement du langage".
+_SKILL_SYNONYMS: dict[str, list[str]] = {
+    "reinforcement learning": ["rl", "apprentissage par renforcement"],
+    "rl":                     ["reinforcement learning", "apprentissage par renforcement"],
+    "llm":                    ["large language model", "modèle de langage", "gpt", "chatgpt"],
+    "large language model":   ["llm", "modèle de langage"],
+    "nlp":                    ["natural language processing", "traitement du langage naturel"],
+    "natural language processing": ["nlp", "traitement langage"],
+    "machine learning":       ["ml", "apprentissage automatique", "apprentissage machine"],
+    "ml":                     ["machine learning", "apprentissage automatique"],
+    "deep learning":          ["dl", "apprentissage profond", "réseau de neurones", "neural network"],
+    "computer vision":        ["vision par ordinateur", "vision artificielle"],
+    "rag":                    ["retrieval augmented generation", "génération augmentée"],
+    "mlops":                  ["ml ops", "machine learning operations"],
+    "generative ai":          ["ia générative", "gen ai", "genai", "intelligence artificielle générative"],
+    "gen ai":                 ["generative ai", "ia générative", "genai"],
+}
+
+
+def _expand_skills(skills: list[str]) -> list[str]:
+    """Ajoute les synonymes connus pour améliorer le recall du keyword matching."""
+    seen = {s.lower() for s in skills}
+    expanded = list(skills)
+    for s in skills:
+        for syn in _SKILL_SYNONYMS.get(s.lower(), []):
+            if syn.lower() not in seen:
+                seen.add(syn.lower())
+                expanded.append(syn)
+    return expanded
+
+
+def _keyword_in_text(keyword: str, cv_lower: str) -> bool:
+    """Vérifie la présence d'un mot-clé en respectant les frontières de mots."""
+    return bool(re.search(r"\b" + re.escape(keyword.lower()) + r"\b", cv_lower))
 
 
 def _calibrate_cosine(raw: float) -> float:
@@ -25,18 +64,27 @@ def _calibrate_cosine(raw: float) -> float:
 
 
 def _keyword_ratio(offer_skills: list[str], cv_text: str) -> float:
-    """Proportion des compétences de l'offre littéralement présentes dans le CV (0.0–1.0)."""
+    """Proportion des compétences (+ synonymes) présentes dans le CV (0.0–1.0)."""
     if not offer_skills:
         return 0.0
     cv_lower = cv_text.lower()
-    hits = sum(1 for s in offer_skills if s.lower() in cv_lower)
+    # Une compétence est trouvée si elle-même OU un de ses synonymes est dans le CV
+    hits = sum(
+        1 for s in offer_skills
+        if _keyword_in_text(s, cv_lower)
+        or any(_keyword_in_text(syn, cv_lower) for syn in _SKILL_SYNONYMS.get(s.lower(), []))
+    )
     return hits / len(offer_skills)
 
 
 def _skill_match(offer_skills: list[str], cv_text: str) -> tuple[list[str], list[str]]:
     cv_lower = cv_text.lower()
-    matched = [s for s in offer_skills if s.lower() in cv_lower]
-    missing = [s for s in offer_skills if s.lower() not in cv_lower]
+    matched = [
+        s for s in offer_skills
+        if _keyword_in_text(s, cv_lower)
+        or any(_keyword_in_text(syn, cv_lower) for syn in _SKILL_SYNONYMS.get(s.lower(), []))
+    ]
+    missing = [s for s in offer_skills if s not in matched]
     return matched[:8], missing[:4]
 
 
@@ -48,14 +96,14 @@ def _infer_title(cv_meta_title: str, cv_text: str) -> str:
 
 
 def _score_domain(consultant_domains: list[str], target_domain: str | None) -> int:
-    """0–25 pts. Priorité absolue si le consultant a déjà travaillé dans ce domaine."""
+    """0–15 pts. Bonus domaine réduit pour ne pas écraser le score compétences."""
     if not target_domain or not consultant_domains:
         return 0
     cfg = get_app_config()
     if target_domain in consultant_domains:
-        return 25
+        return 15
     if any(d in consultant_domains for d in cfg.domain_similar.get(target_domain, [])):
-        return 12
+        return 7
     return 0
 
 
@@ -114,9 +162,9 @@ def _max_possible_score(
     request_seniority: str | None = None,
 ) -> int:
     """Calcule le score maximum atteignable selon les critères actifs de la requête."""
-    max_score = 55  # compétences toujours présentes
+    max_score = 65  # compétences (augmenté de 55→65, domaine réduit de 25→15)
     if eff_domain:
-        max_score += 25
+        max_score += 15
     if eff_location or eff_remote:
         max_score += 5
     max_score += 15  # disponibilité : toujours dans le dénominateur (critère métier)
@@ -266,11 +314,19 @@ async def analyze_and_match(request: AnalyzeRequest) -> AnalyzeResponse:
             logger.debug("[matcher] Filtré (filet Python) : %s", r.get("name"))
             continue
 
-        # Score compétences : hybride 70% embedding sémantique + 30% matching direct
+        # Score compétences : hybride 70% embedding sémantique + 30% keyword matching (avec synonymes)
         calibrated = _calibrate_cosine(r["score"])
         kw_ratio   = _keyword_ratio(offer.technical_skills, r["text"])
         hybrid     = calibrated * 0.70 + kw_ratio * 0.30
-        skills_score = max(0, min(55, round(hybrid * 55)))
+        skills_score = max(0, min(65, round(hybrid * 65)))
+
+        # Seuil minimum : profil exclu si trop éloigné des compétences demandées
+        if skills_score < _MIN_SKILLS_SCORE:
+            logger.debug(
+                "[matcher] Exclu (skills %d < %d) : %s",
+                skills_score, _MIN_SKILLS_SCORE, r.get("name"),
+            )
+            continue
 
         domain_score    = _score_domain(r.get("domains", []), eff_domain)
         avail_score     = _score_availability(r.get("status"), r.get("availability_date"))
